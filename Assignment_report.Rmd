@@ -1,0 +1,239 @@
+---
+title: "Accelerometer Assignment"
+author: "Manish Sachdeva"
+date: "Saturday, February 14, 2015"
+output: html_document
+---
+
+##Methodology
+The objective of project is predict the manner in which 6 participants did exercise. The data was collected through accelerometers on arm, forearm, belt of the participants and on dumbell. The classe variable in the data set was to be predicted using other parameters in the dataset.
+
+##Data Cleaning
+It was observed that a lot of data were blank spaces, Na's and "DIV" string which is basically incorrect information. On further investigating it was observed that out of 160 variables only 60 variables were there which had over 1% of useful data(Not containg the above mentioned junk). Out of these 60 variables 7 were names, time stamop and other non useful data sets which had no role in predicting the classe variable. So finally I was left with 52 predictors and 1 predictee. 
+
+##Cross Validation and error rate Analysis 
+Two models classification tree(rpart) and random forest were compared using the above data set. For this comparison, the training data set was first subdivided randomly in 60:40 ratio twice at different seeds. The reason for diviing it twice was cross validation. I didnot use the standard kfold method just or the sake of simplicity. Besides it, pca analysis was run at 95% threshold which yielded a set of 26 uncorelated variables. This was further done for cross-validation and in order to increase the accuracy of the predictions. Random forest and classification tree were used for fitting the data with both pca refined and non-refined vectors as predictors. Test data set was predicted using all the modelfits generated. The error in prediction which is basically (1-Accuracy) of all four model fit of random forest was averaged and compared with the corresponding average of classification tree method.
+
+
+```{r results='hide', message=FALSE, warning=FALSE, echo=FALSE}
+library(caret);library(ggplot2)
+library(randomForest); library(rpart); library(gbm)
+
+
+training<-read.csv("accelerometer_train.csv",colClasses="character")
+testing<-read.csv("accelerometer_test.csv",colClasses="character")
+
+a<- NULL
+ 
+
+for (j in 1:dim(training)[2]){
+  count=0
+  print(j)
+  for (i in 1:dim(training)[1]){
+    if(!(is.na(training[i,j]) | training[i,j]=="" )) count=count+1
+    
+  }
+  
+  a[j]=count
+}
+
+training3<- training[,a==19622]
+set.seed(12323)
+training3<- training3[,-c(1:7)]
+
+for (j in 1:(dim(training3)[2])){
+  
+  training3[,j]<- as.numeric(training3[,j])
+
+}
+training3$classe<- as.factor(training$classe)
+
+##creating training and testing data
+set.seed(423423)
+intrain<- createDataPartition(y=training3$classe,p=0.6,list=F)
+traindata<- training3[intrain,]
+testdata<- training3[-intrain,]
+
+## Preprocessing with pca
+
+pcapre<- preProcess(traindata[,-53], method=c("pca"))
+pcatraindata<- predict(pcapre,traindata[,-53])
+pcatraindata$classe<- as.factor(traindata$classe)
+
+## creating test data using pca
+pcatestdata<- predict(pcapre,testdata[,-53])
+
+## creating model fits in order with method as random forest, 
+## and classification tree for variable with and without pca
+
+
+
+modelfitclass<- rpart(classe~.,data=traindata, method="class")
+modelfitrf <- randomForest(classe~., data=traindata)
+
+modelfitpcaclass<- rpart(classe~.,data=pcatraindata, method="class")
+modelfitpcarf <- randomForest(classe~., data=pcatraindata)
+
+## predicting the value of the test data set with all the above models
+
+testclass<- predict(modelfitclass, testdata,type="class")
+testrf<- predict(modelfitrf, testdata)
+
+testpcaclass<- predict(modelfitpcaclass, pcatestdata,type="class")
+testpcarf<- predict(modelfitpcarf, pcatestdata)
+
+
+```
+
+##Confusion Matrix for the first random subset of data
+
+```{r results='asis', message=FALSE, warning=FALSE, echo=FALSE}
+# Checking the accuracy of method
+
+confusionmatrixclass<- confusionMatrix(testdata$classe,testclass)
+confusionmatrixrf<- confusionMatrix(testdata$classe,testrf)
+confusionmatrixpcaclass<- confusionMatrix(testdata$classe,testpcaclass)
+confusionmatrixpcarf<- confusionMatrix(testdata$classe,testpcarf)
+
+print(confusionmatrixclass)
+print(confusionmatrixrf)
+print(confusionmatrixpcaclass)
+print(confusionmatrixpcarf)
+
+```
+
+##Inference
+It was infered that random forest was a better model as compared to classification tree for predicting the actual data as its accuracy on an average was greater than 99% as compared to 73% of the classification tree method.Thus random forest with the whole data set was used to make the final model which was used to predict the test data for the submission part of the assignment with all 52 predictors and not the pca predictor as taking all the 52 predictors yeilded more accuracy.
+
+##Appendix
+
+The code for the above procedure is as follows 
+
+```{r results='hide', message=FALSE, warning=FALSE, eval=FALSE}
+library(caret);library(ggplot2);library(randomForest); library(rpart); library(gbm)
+
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+", "accelerometer_train.csv")
+
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv","accelerometer_test.csv")
+
+training<-read.csv("accelerometer_train.csv",colClasses="character")
+testing<-read.csv("accelerometer_test.csv",colClasses="character")
+
+## Finding the variable containg over 99% NA, Blanks or DIV string
+
+a<- NULL
+
+for (j in 1:dim(training)[2]){
+  count=0
+  print(j)
+  for (i in 1:dim(training)[1]){
+    if(!(is.na(training[i,j]) | training[i,j]=="" )) count=count+1
+    
+  }
+  
+  a[j]=count
+}
+
+# Subsetting the file to remove those useless variables 
+
+training3<- training[,a==19622]
+set.seed(12323)
+training3<- training3[,-c(1:7)]
+
+for (j in 1:(dim(training3)[2])){
+  
+  training3[,j]<- as.numeric(training3[,j])
+
+}
+training3$classe<- as.factor(training$classe)
+
+##creating training and testing data by setting two diff seeds to get two 
+##different subsets each time
+set.seed(423423)
+intrain<- createDataPartition(y=training3$classe,p=0.6,list=F)
+traindata<- training3[intrain,]
+testdata<- training3[-intrain,]
+
+## Preprocessing with pca
+
+pcapre<- preProcess(traindata[,-53], method=c("pca"))
+pcatraindata<- predict(pcapre,traindata[,-53])
+pcatraindata$classe<- as.factor(traindata$classe)
+
+## creating test data using pca
+pcatestdata<- predict(pcapre,testdata[,-53])
+
+## creating model fits in order with method as random forest, 
+## and classification tree for variable with and without pca
+
+
+
+modelfitclass<- rpart(classe~.,data=traindata, method="class")
+modelfitrf <- randomForest(classe~., data=traindata)
+
+modelfitpcaclass<- rpart(classe~.,data=pcatraindata, method="class")
+modelfitpcarf <- randomForest(classe~., data=pcatraindata)
+
+## predicting the value of the test data set with all the above models
+
+testclass<- predict(modelfitclass, testdata,type="class")
+testrf<- predict(modelfitrf, testdata)
+
+testpcaclass<- predict(modelfitpcaclass, pcatestdata,type="class")
+testpcarf<- predict(modelfitpcarf, pcatestdata)
+
+# Checking the accuracy of method
+
+confusionmatrixclass<- confusionMatrix(testdata$classe,testclass)
+confusionmatrixrf<- confusionMatrix(testdata$classe,testrf)
+confusionmatrixpcaclass<- confusionMatrix(testdata$classe,testpcaclass)
+confusionmatrixpcarf<- confusionMatrix(testdata$classe,testpcar
+
+                                       
+##creating training and testing data
+set.seed(4234)
+intrain2<- createDataPartition(y=training3$classe,p=0.6,list=F)
+traindata2<- training3[intrain2,]
+testdata2<- training3[-intrain2,]
+
+## Preprocessing with pca
+
+pcapre2<- preProcess(traindata2[,-53], method=c("pca"))
+pcatraindata2<- predict(pcapre2,traindata2[,-53])
+pcatraindata$classe2<- as.factor(traindata$classe)
+
+## creating test data using pca
+pcatestdata2<- predict(pcapre2,testdata2[,-53])
+
+## creating model fits in order with method as random forest, 
+## and classification tree for variable with and without pca
+
+
+
+modelfitclass2<- rpart(classe~.,data=traindata2, method="class")
+modelfitrf2 <- randomForest(classe~., data=traindata2)
+
+modelfitpcaclass2<- rpart(classe~.,data=pcatraindata2, method="class")
+modelfitpcarf2 <- randomForest(classe~., data=pcatraindata2)
+
+## predicting the value of the test data set with all the above models
+
+testclass2<- predict(modelfitclass, testdata,type="class")
+testrf2<- predict(modelfitrf, testdata)
+
+testpcaclass2<- predict(modelfitpcaclass, pcatestdata,type="class")
+testpcarf2<- predict(modelfitpcarf, pcatestdata)
+
+# Checking the accuracy of method
+
+confusionmatrixclass2<- confusionMatrix(testdata$classe,testclass)
+confusionmatrixrf2<- confusionMatrix(testdata$classe,testrf)
+confusionmatrixpcaclass2<- confusionMatrix(testdata$classe,testpcaclass)
+confusionmatrixpcarf2<- confusionMatrix(testdata$classe,testpcar
+
+finalmodel <- randomForest(classe~., data=training3)
+                            
+
+```
+
